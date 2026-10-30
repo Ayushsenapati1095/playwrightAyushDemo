@@ -23,21 +23,20 @@ parameters:
     type: string
     default: qa
     values: [ qa, stage ]
-  - name: suite
-    displayName: TestNG suite
+  - name: tags
+    displayName: Cucumber tag expression
     type: string
-    default: smoke
-    values: [ smoke, regression, api, ui ]
+    default: '@smoke'
 
 variables:
   # - group: playwright-secrets
   MAVEN_CACHE_FOLDER: $(Pipeline.Workspace)/.m2/repository
   MAVEN_OPTS: -Dmaven.repo.local=$(MAVEN_CACHE_FOLDER)
-  # Nightly runs use the full regression suite, everything else uses the selected one
+  # Nightly runs use the full regression set, everything else uses the selected tags
   ${{ if eq(variables['Build.Reason'], 'Schedule') }}:
-    SUITE: regression
+    TAGS: '@regression'
   ${{ else }}:
-    SUITE: ${{ parameters.suite }}
+    TAGS: ${{ parameters.tags }}
 
 stages:
   - stage: Test
@@ -68,8 +67,8 @@ stages:
                 -Dbrowser=$(BROWSER) \
                 -Dheadless=true \
                 -Dretry.count=1 \
-                -DsuiteXmlFile=src/test/resources/suites/$(SUITE).xml
-            displayName: Run $(SUITE) on $(BROWSER)
+                "-Dcucumber.filter.tags=$(TAGS)"
+            displayName: Run $(TAGS) on $(BROWSER)
             # env:
             #   API_KEY: $(apiKey)       # secret from the variable group
 
@@ -79,12 +78,17 @@ stages:
             inputs:
               testResultsFormat: JUnit
               testResultsFiles: '**/surefire-reports/TEST-*.xml'
-              testRunTitle: '$(SUITE) - $(BROWSER)'
+              testRunTitle: '$(TAGS) - $(BROWSER)'
               mergeTestResults: true
 
           - publish: target/allure-results
             artifact: allure-results-$(BROWSER)
             displayName: Publish Allure results
+            condition: always()
+
+          - publish: target/cucumber-reports
+            artifact: cucumber-report-$(BROWSER)-$(System.JobAttempt)
+            displayName: Publish Cucumber HTML/JSON report
             condition: always()
 
           - publish: target/traces

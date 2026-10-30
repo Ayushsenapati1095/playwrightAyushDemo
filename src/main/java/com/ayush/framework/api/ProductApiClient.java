@@ -24,4 +24,9 @@ public class ProductApiClient extends ApiClient {
         }
         return as(response, Product.class);
     }
+
+    /** Parses a response previously returned by {@link #getProductRaw(String)}. */
+    public Product parse(APIResponse response) {
+        return as(response, Product.class);
+    }
 }

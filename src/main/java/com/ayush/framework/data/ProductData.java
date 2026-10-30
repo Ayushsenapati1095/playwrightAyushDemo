@@ -48,6 +48,16 @@ public enum ProductData {
         return available;
     }
 
+    /** Looks a product up by its visible title, as written in feature files (case-insensitive). */
+    public static ProductData fromTitle(String title) {
+        for (ProductData p : values()) {
+            if (p.title.equalsIgnoreCase(title.trim())) {
+                return p;
+            }
+        }
+        throw new IllegalArgumentException("Unknown product title '" + title + "'. Add it to ProductData.");
+    }
+
     @Override
     public String toString() {
         return title;

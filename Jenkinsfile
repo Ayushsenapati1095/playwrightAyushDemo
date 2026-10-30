@@ -1,11 +1,11 @@
 // Jenkins declarative pipeline for the Playwright Java framework.
-// Plugins required: Docker Pipeline, JUnit, Allure Jenkins Plugin, (optional) Credentials Binding.
+// Plugins required: Docker Pipeline, JUnit, HTML Publisher, Allure Jenkins Plugin, (optional) Credentials Binding.
 pipeline {
     agent none
 
     parameters {
         choice(name: 'ENV',     choices: ['qa', 'stage'], description: 'Target environment (config/<env>.properties)')
-        choice(name: 'SUITE',   choices: ['smoke', 'regression', 'api', 'ui'], description: 'TestNG suite to run')
+        string(name: 'TAGS',    defaultValue: '@smoke', description: 'Cucumber tag expression, e.g. @smoke, @regression, "@cart and not @negative"')
         booleanParam(name: 'CROSS_BROWSER', defaultValue: false, description: 'Run UI on chromium, firefox and webkit in parallel')
     }
 
@@ -53,12 +53,16 @@ pipeline {
                                   -Dbrowser=${BROWSER} \
                                   -Dheadless=true \
                                   -Dretry.count=1 \
-                                  -DsuiteXmlFile=src/test/resources/suites/${params.SUITE}.xml
+                                  "-Dcucumber.filter.tags=${params.TAGS}"
                             """
                         }
                         post {
                             always {
                                 junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
+                                // Cucumber's own HTML report (needs the HTML Publisher plugin)
+                                publishHTML(target: [reportDir: 'target/cucumber-reports', reportFiles: 'cucumber.html',
+                                                     reportName: "Cucumber Report - ${BROWSER}", keepAll: true, allowMissing: true,
+                                                     alwaysLinkToLastBuild: true])
                                 archiveArtifacts artifacts: 'target/traces/**, target/videos/**, target/logs/**', allowEmptyArchive: true
                                 stash name: "allure-${BROWSER}", includes: 'target/allure-results/**', allowEmpty: true
                             }

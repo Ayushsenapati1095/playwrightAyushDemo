@@ -9,7 +9,7 @@
     <version>1.0.0</version>
     <packaging>jar</packaging>
     <name>Playwright Java Enterprise Automation Framework</name>
-    <description>UI + API automation framework built on Playwright Java, TestNG and Allure</description>
+    <description>Cucumber BDD UI + API automation framework built on Playwright Java, TestNG and Allure</description>
 
     <properties>
         <java.version>21</java.version>
@@ -19,6 +19,7 @@
         <!-- Keep in sync with the Docker image tag used in CI (mcr.microsoft.com/playwright/java:v<version>-noble) -->
         <playwright.version>1.62.0</playwright.version>
         <testng.version>7.10.2</testng.version>
+        <cucumber.version>7.20.1</cucumber.version>
         <allure.version>2.29.0</allure.version>
         <aspectj.version>1.9.22.1</aspectj.version>
         <jackson.version>2.18.2</jackson.version>
@@ -31,8 +32,7 @@
         <compiler.plugin.version>3.13.0</compiler.plugin.version>
         <allure.maven.version>2.15.2</allure.maven.version>
 
-        <!-- Overridable from the command line: mvn test -DsuiteXmlFile=src/test/resources/suites/smoke.xml -->
-        <suiteXmlFile>src/test/resources/suites/regression.xml</suiteXmlFile>
+        <suiteXmlFile>src/test/resources/testng.xml</suiteXmlFile>
     </properties>
 
     <dependencyManagement>
@@ -55,17 +55,39 @@
             <version>${playwright.version}</version>
         </dependency>
 
-        <!-- Test runner -->
+        <!-- Test runner (Cucumber scenarios are executed through TestNG) -->
         <dependency>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
             <version>${testng.version}</version>
         </dependency>
 
+        <!-- BDD -->
+        <dependency>
+            <groupId>io.cucumber</groupId>
+            <artifactId>cucumber-java</artifactId>
+            <version>${cucumber.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.cucumber</groupId>
+            <artifactId>cucumber-testng</artifactId>
+            <version>${cucumber.version}</version>
+        </dependency>
+        <!-- Dependency injection: shares one TestContext between step classes per scenario -->
+        <dependency>
+            <groupId>io.cucumber</groupId>
+            <artifactId>cucumber-picocontainer</artifactId>
+            <version>${cucumber.version}</version>
+        </dependency>
+
         <!-- Reporting -->
         <dependency>
             <groupId>io.qameta.allure</groupId>
-            <artifactId>allure-testng</artifactId>
+            <artifactId>allure-cucumber7-jvm</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-java-commons</artifactId>
         </dependency>
 
         <!-- JSON (API models) -->

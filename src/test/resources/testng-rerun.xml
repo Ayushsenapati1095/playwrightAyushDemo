@@ -1,0 +1,11 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Cucumber Rerun Failed" verbose="1">
+    <listeners>
+        <listener class-name="com.ayush.framework.listeners.SuiteListener"/>
+    </listeners>
+    <test name="Rerun failed scenarios">
+        <classes>
+            <class name="com.ayush.bdd.runners.FailedScenariosRunner"/>
+        </classes>
+    </test>
+</suite>

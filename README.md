@@ -1,130 +1,145 @@
-# Playwright Java Enterprise Automation Framework
+# Playwright Java + Cucumber BDD Automation Framework
 
-UI + API test automation framework built on **Playwright Java**, **TestNG**, **Allure** and **Maven**, with ready-to-use **Jenkins** and **Azure DevOps** pipelines.
-The demo tests target the public Shopify store [sauce-demo.myshopify.com](https://sauce-demo.myshopify.com/).
+Enterprise-style **BDD** test automation framework for UI and API testing, built on **Playwright Java**, **Cucumber 7**, **TestNG**, **Allure** and **Maven**, with ready-to-use **Jenkins** and **Azure DevOps** pipelines.
+The demo scenarios target the public Shopify store [sauce-demo.myshopify.com](https://sauce-demo.myshopify.com/).
 
 ## Tech stack
 
 | Concern | Tool |
 |---|---|
 | Language / build | Java 21, Maven |
+| BDD | Cucumber 7 (Gherkin feature files, Scenario Outlines, data tables, tags) |
+| Runner | Cucumber TestNG (`AbstractTestNGCucumberTests`), scenarios run in parallel |
+| Dependency injection | Cucumber PicoContainer (one `TestContext` shared by steps per scenario) |
 | Browser + API automation | Playwright Java 1.62 (`Page`, `Locator`, `APIRequestContext`) |
-| Test runner | TestNG (groups, suites, data providers, parallel, listeners) |
-| Assertions | Playwright web-first `assertThat` (UI), AssertJ (data/API) |
-| Reporting | Allure (+ screenshots, traces, API logs), Surefire JUnit XML |
-| JSON | Jackson (records as API models) |
-| Test data | Datafaker + `ProductData` enum |
+| Assertions | Playwright web-first `assertThat` (UI), AssertJ (API/data) |
+| Reporting | Allure (Cucumber 7 adapter), Cucumber HTML + JSON, Surefire JUnit XML |
+| JSON / test data | Jackson (record models), Datafaker, `ProductData` enum |
 | Logging | SLF4J + Log4j2 (console + `target/logs/test-run.log`) |
 | CI/CD | Jenkinsfile, azure-pipelines.yml, Dockerfile (official Playwright Java image) |
 
 ## Project structure
 
 ```
-src/main/java/com/ayush/framework
-├── config/       ConfigManager       – env files + -D / env-var overrides
-├── core/         PlaywrightManager   – ThreadLocal Playwright/Browser per thread
-│                 BrowserContextManager – fresh context per test, tracing, video
-├── components/   HeaderComponent     – shared header/nav (component object)
-├── pages/        BasePage, HomePage, CatalogPage, ProductPage, CartPage, LoginPage, SearchPage, AboutUsPage
+src/main/java/com/ayush/framework          ← reusable framework (no Cucumber code)
+├── config/       ConfigManager             – env files + -D / env-var overrides
+├── core/         PlaywrightManager         – ThreadLocal Playwright/Browser per thread
+│                 BrowserContextManager     – fresh context per scenario, tracing, video
+├── components/   HeaderComponent           – shared header/navigation
+├── pages/        BasePage, GenericPage, HomePage, CatalogPage, ProductPage, CartPage, LoginPage, SearchPage, AboutUsPage
 ├── api/          ApiClient, ProductApiClient, models/Product
 ├── data/         ProductData (expected catalogue), TestDataFactory (Datafaker)
-├── listeners/    SuiteListener, TestListener, RetryAnalyzer, RetryTransformer
+├── listeners/    SuiteListener (Allure env + cleanup), RetryAnalyzer, RetryTransformer
 └── utils/        AllureAttachments
-src/test/java/com/ayush/tests
-├── base/         BaseTest            – per-test setup/teardown, failure evidence
-├── ui/           HomePageTests, ProductTests, CartTests, LoginTests, SearchTests
-└── api/          ProductApiTests
+
+src/test/java/com/ayush/bdd                ← BDD layer
+├── runners/      TestRunner (all scenarios), FailedScenariosRunner (rerun failures)
+├── hooks/        Hooks – browser per UI scenario, screenshot + trace on failure
+├── context/      TestContext – scenario-scoped state injected by PicoContainer
+└── steps/        CommonSteps, ProductSteps, CartSteps, LoginSteps, SearchSteps, ApiSteps
+
 src/test/resources
+├── features/     home, product, cart, login, search, product_api (.feature)
 ├── config/       qa.properties, stage.properties
-├── suites/       smoke.xml, regression.xml, ui.xml, api.xml
-├── log4j2.xml, allure.properties
+├── testng.xml, testng-rerun.xml, cucumber.properties, log4j2.xml, allure.properties
 ```
 
-## Test cases included
+## Feature files and scenarios
 
-| Class | Test | Groups |
+| Feature | Scenarios | Tags |
 |---|---|---|
-| HomePageTests | Home page loads (title, tagline, empty cart) | smoke, regression |
-| | Featured products are displayed | smoke, regression |
-| | Catalog shows all 7 products | regression |
-| | About Us page opens | regression |
-| ProductTests | Product details correct (**data-driven**, every in-stock product) | regression |
-| | Open product from catalog | smoke, regression |
-| | Sold-out product cannot be added | regression |
-| CartTests | Add product to cart → count + cart line | smoke, regression |
-| | Add multiple products | regression |
-| | Remove product empties cart | regression |
-| LoginTests | Login page opens from header | smoke, regression |
-| | Invalid login shows error | regression |
-| | Forgot password shows reset form | regression |
-| SearchTests | Search page opens from header | regression |
-| | Search "jacket" returns only jackets | smoke, regression |
-| ProductApiTests | Product JSON matches catalogue (**data-driven**, 7 products) | smoke, regression, api |
-| | Product endpoint returns JSON 200 | regression, api |
-| | Unknown product returns 404 | regression, api |
+| `home.feature` | Home page loads with branding and empty cart · Featured products shown · Catalog lists every product · About Us opens | `@ui @home` |
+| `product.feature` | **Scenario Outline**: product details for 5 products · Open product from catalog · Sold-out product can't be added | `@ui @product` |
+| `cart.feature` | Add one product · Add several products (**data table**) · Remove product empties cart | `@ui @cart` |
+| `login.feature` | Login page opens · Invalid login shows error · Forgot password shows reset form | `@ui @login` |
+| `search.feature` | Search page opens · **Scenario Outline**: search returns only matching products | `@ui @search` |
+| `product_api.feature` | **Scenario Outline**: product API data for all 7 products · Unknown product returns 404 | `@api` |
 
-## Running locally
+Every scenario is also tagged `@smoke` and/or `@regression`; negative tests carry `@negative`. Add `@wip` to keep a scenario out of runs while you write it.
 
-Prerequisites: JDK 21 and Maven 3.9+. Browsers are downloaded automatically by Playwright on the first run.
-(Optional, to pre-install them: `mvn exec:java -e -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install --with-deps"`.)
+Example:
+
+```gherkin
+@regression
+Scenario: Add several products to the cart
+  Given I have added the following products to the cart:
+    | Grey jacket |
+    | Striped top |
+  Then the cart should show 2 items
+  When I open the cart
+  Then the cart should contain the following products:
+    | Grey jacket |
+    | Striped top |
+```
+
+## Running
+
+Prerequisites: JDK 21 and Maven 3.9+. Playwright downloads the browsers automatically on the first run.
 
 ```bash
-# Default: regression suite, qa env, headless chromium
+# All scenarios (except @wip)
 mvn clean test
 
-# Smoke suite, headed Firefox
-mvn clean test -DsuiteXmlFile=src/test/resources/suites/smoke.xml -Dbrowser=firefox -Dheadless=false
+# By tag expression
+mvn clean test "-Dcucumber.filter.tags=@smoke"
+mvn clean test "-Dcucumber.filter.tags=@cart and not @negative"
+mvn clean test "-Dcucumber.filter.tags=@api"
 
-# API only
-mvn clean test -DsuiteXmlFile=src/test/resources/suites/api.xml
+# Headed Firefox against another environment
+mvn clean test "-Dcucumber.filter.tags=@smoke" -Dbrowser=firefox -Dheadless=false -Denv=stage
 
-# Other environment + retries
-mvn clean test -Denv=stage -Dretry.count=1
+# A single feature file
+mvn clean test -Dcucumber.features=src/test/resources/features/cart.feature
 
-# Allure report (opens a browser)
-mvn allure:serve
+# Re-run only the scenarios that failed last time (no "clean", it needs target/rerun.txt)
+mvn test -DsuiteXmlFile=src/test/resources/testng-rerun.xml
 ```
 
-Any key in `config/<env>.properties` can be overridden with `-Dkey=value` or an environment variable (`base.url` → `BASE_URL`).
+On Windows PowerShell, keep the quotes around `-Dcucumber.filter.tags=...`.
 
-### Debugging failures
-For every failed test the framework attaches to Allure: a full-page screenshot, the page URL and the **Playwright trace**.
-Traces are also saved to `target/traces/*.zip` — open one with
-`mvn exec:java -e -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="show-trace target/traces/<file>.zip"`
-or drag it into https://trace.playwright.dev.
+Running from IntelliJ: install the **Cucumber for Java** and **Gherkin** plugins, then right-click a `.feature` file or scenario and choose **Run**. You can also right-click `TestRunner`.
 
-## Design rules
+### Reports
+- **Allure:** `mvn allure:serve`
+- **Cucumber HTML:** `target/cucumber-reports/cucumber.html`. The JSON is next to it, for Jenkins or other report plugins.
+- **Failure evidence:** a screenshot is embedded in both reports, and the Playwright trace is attached to Allure and saved in `target/traces/`. Open a trace at https://trace.playwright.dev.
 
-- **Thread safety:** Playwright objects are not thread-safe. `PlaywrightManager` keeps one Playwright + Browser per thread (`ThreadLocal`), and every test gets its own `BrowserContext`, so suites run in parallel (`parallel="classes"`) without shared state.
-- **Locators:** role/label/text first (`getByRole`, `getByLabel`), CSS only as a fallback via `Locator.or()`. No XPath.
-- **Page objects** expose actions and locators, never assertions. Navigation methods return the next page object.
-- **Assertions** use Playwright's auto-waiting `assertThat` — no `Thread.sleep()` / `waitForTimeout()`.
-- **Data:** expected data lives in `ProductData`; dynamic data comes from `TestDataFactory`, so tests never depend on each other.
-- **Secrets** never go in the repo: pass them as environment variables from Jenkins credentials or an Azure DevOps variable group (Key Vault).
+### Parallel execution
+Scenarios run in parallel through the TestNG data provider. Change the number of parallel browsers with `data-provider-thread-count` in `testng.xml`.
+Each scenario gets its own browser context, and each thread gets its own browser (`ThreadLocal`), so scenarios never share state.
+
+## Writing new tests
+
+1. Add a scenario to a `.feature` file under `src/test/resources/features`, reusing existing steps where possible.
+2. Run it. Cucumber prints snippets for any undefined steps.
+3. Implement the new steps in the matching `steps/*Steps.java` class. Inject `TestContext` in the constructor, call page-object methods, and assert with Playwright's `assertThat`.
+4. Put locators and actions in page objects under `framework/pages`, never in step classes.
+
+### Design rules
+- Steps are thin: they read like the Gherkin and delegate to page objects or API clients.
+- Use no static state in steps. Share data through `TestContext`, which PicoContainer creates once per scenario.
+- Locators use roles, labels or text first. CSS is only a fallback, through `Locator.or()`. No XPath.
+- No `Thread.sleep()` or `waitForTimeout()`. Playwright's auto-waiting assertions handle timing.
+- Secrets never go in the repo. Pass them as environment variables from Jenkins credentials or an Azure DevOps variable group.
 
 ## CI/CD
 
-All pipelines run inside `mcr.microsoft.com/playwright/java:v1.62.0-noble` (JDK, Maven and browsers pre-installed). **When you bump `playwright.version` in the pom, bump the image tag too.**
+All pipelines run in `mcr.microsoft.com/playwright/java:v1.62.0-noble`, which has the JDK, Maven and browsers pre-installed. **When you bump `playwright.version` in the pom, keep this image tag in step.**
 
-**Jenkins (`Jenkinsfile`)** — parameters `ENV`, `SUITE`, `CROSS_BROWSER`; matrix over chromium/firefox/webkit; publishes JUnit, archives traces/logs and builds one merged Allure report. Needs the Docker Pipeline, JUnit and Allure plugins. Nightly cron included.
-
-**Azure DevOps (`azure-pipelines.yml`)** — runs on PRs/merges to `main` and nightly; parameters `env` and `suite`; browser matrix; Maven cache; publishes JUnit results to the Tests tab, Allure results and failure traces as artifacts; a Report stage merges and generates the Allure HTML report.
-
-**Docker**
-```bash
-docker build -t pw-java-tests .
-docker run --rm --ipc=host -v "$PWD/target:/app/target" pw-java-tests -DsuiteXmlFile=src/test/resources/suites/smoke.xml
-```
+- **Jenkins (`Jenkinsfile`):**
+  - parameters `ENV`, `TAGS` and `CROSS_BROWSER`, with a browser matrix and a nightly cron
+  - publishes JUnit results, the Cucumber HTML report and one merged Allure report
+  - plugins needed: Docker Pipeline, JUnit, HTML Publisher and Allure
+- **Azure DevOps (`azure-pipelines.yml`):**
+  - runs on PRs and merges to `main`, plus nightly `@regression`
+  - parameters `env` and `tags`, with a browser matrix and a Maven cache
+  - publishes JUnit results to the Tests tab; Cucumber, Allure and trace files go out as artifacts, and a final stage builds the merged Allure report
+- **Docker:**
+  ```bash
+  docker build -t pw-java-tests .
+  docker run --rm --ipc=host -v "$PWD/target:/app/target" pw-java-tests "-Dcucumber.filter.tags=@smoke"
+  ```
 
 ## Notes on the demo site
-
-- Shopify may show a bot-protection challenge after repeated failed logins from one IP, which can affect `invalidLoginShowsError`. It is kept out of the smoke suite for that reason.
-- The cart lives in cookies, and each test uses a fresh browser context, so cart tests don't affect each other.
-
-## Extending the framework
-
-- **Logged-in tests:** save `storageState` after login once and override `storageState()` in a test class.
-- **More APIs:** extend `ApiClient`, add record models under `api/models`.
-- **Accessibility:** add `com.deque.html.axe-core:playwright` and scan pages in a new `a11y` group.
-- **Visual checks:** Applitools/Percy or an image-comparison library (Playwright Java has no built-in `toHaveScreenshot`).
-- **Quality gates:** add Checkstyle/SpotBugs plugins and SonarQube analysis to the pipeline.
+- Shopify may show a bot-protection challenge after repeated failed logins. The invalid-login scenario is tagged `@negative` and kept out of `@smoke` for that reason.
+- The cart is stored in cookies, and every scenario uses a fresh browser context, so cart scenarios don't affect each other.

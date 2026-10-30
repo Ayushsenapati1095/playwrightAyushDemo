@@ -70,6 +70,12 @@ public class HeaderComponent {
         return new SearchPage(page);
     }
 
+    /** Clicks a navigation link by its visible text, e.g. "Catalog", "About Us", "Log In", "Search". */
+    @Step("Click '{name}' in the navigation")
+    public void clickNavLink(String name) {
+        link(name).click();
+    }
+
     @Step("Open the cart page")
     public CartPage openCart() {
         // Navigating directly is more reliable than the drawer toggle, which only opens a mini-cart.

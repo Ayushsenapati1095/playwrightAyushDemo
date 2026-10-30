@@ -1,0 +1,17 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!--
+  Runs every Cucumber scenario through TestNG.
+  Scenarios run in parallel: data-provider-thread-count = number of browsers at once.
+  Choose scenarios with tags:  mvn test -Dcucumber.filter.tags="@smoke"
+-->
+<suite name="Cucumber BDD Suite" data-provider-thread-count="4" verbose="1">
+    <listeners>
+        <listener class-name="com.ayush.framework.listeners.SuiteListener"/>
+        <listener class-name="com.ayush.framework.listeners.RetryTransformer"/>
+    </listeners>
+    <test name="Cucumber Scenarios">
+        <classes>
+            <class name="com.ayush.bdd.runners.TestRunner"/>
+        </classes>
+    </test>
+</suite>
