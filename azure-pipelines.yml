@@ -1,0 +1,112 @@
+# Azure DevOps pipeline for the Playwright Java framework.
+# Secrets: create a variable group "playwright-secrets" (optionally linked to Azure Key Vault)
+# and uncomment the group line below.
+
+trigger:
+  branches:
+    include: [ main ]
+
+pr:
+  branches:
+    include: [ main ]
+
+schedules:
+  - cron: "30 19 * * *"          # 01:00 IST nightly regression
+    displayName: Nightly regression
+    branches:
+      include: [ main ]
+    always: true
+
+parameters:
+  - name: env
+    displayName: Environment
+    type: string
+    default: qa
+    values: [ qa, stage ]
+  - name: suite
+    displayName: TestNG suite
+    type: string
+    default: smoke
+    values: [ smoke, regression, api, ui ]
+
+variables:
+  # - group: playwright-secrets
+  MAVEN_CACHE_FOLDER: $(Pipeline.Workspace)/.m2/repository
+  MAVEN_OPTS: -Dmaven.repo.local=$(MAVEN_CACHE_FOLDER)
+  # Nightly runs use the full regression suite, everything else uses the selected one
+  ${{ if eq(variables['Build.Reason'], 'Schedule') }}:
+    SUITE: regression
+  ${{ else }}:
+    SUITE: ${{ parameters.suite }}
+
+stages:
+  - stage: Test
+    jobs:
+      - job: Playwright
+        timeoutInMinutes: 60
+        pool:
+          vmImage: ubuntu-latest
+        # Keep this tag equal to <playwright.version> in pom.xml
+        container: mcr.microsoft.com/playwright/java:v1.62.0-noble
+        strategy:
+          matrix:
+            chromium: { BROWSER: chromium }
+            firefox:  { BROWSER: firefox }
+            webkit:   { BROWSER: webkit }
+          maxParallel: 3
+        steps:
+          - task: Cache@2
+            displayName: Cache Maven repository
+            inputs:
+              key: 'maven | "$(Agent.OS)" | pom.xml'
+              restoreKeys: 'maven | "$(Agent.OS)"'
+              path: $(MAVEN_CACHE_FOLDER)
+
+          - script: |
+              mvn -B -ntp clean test \
+                -Denv=${{ parameters.env }} \
+                -Dbrowser=$(BROWSER) \
+                -Dheadless=true \
+                -Dretry.count=1 \
+                -DsuiteXmlFile=src/test/resources/suites/$(SUITE).xml
+            displayName: Run $(SUITE) on $(BROWSER)
+            # env:
+            #   API_KEY: $(apiKey)       # secret from the variable group
+
+          - task: PublishTestResults@2
+            displayName: Publish JUnit results
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: '**/surefire-reports/TEST-*.xml'
+              testRunTitle: '$(SUITE) - $(BROWSER)'
+              mergeTestResults: true
+
+          - publish: target/allure-results
+            artifact: allure-results-$(BROWSER)
+            displayName: Publish Allure results
+            condition: always()
+
+          - publish: target/traces
+            artifact: traces-$(BROWSER)-$(System.JobAttempt)
+            displayName: Publish Playwright traces (failures only)
+            condition: failed()
+
+  - stage: Report
+    dependsOn: Test
+    condition: always()
+    jobs:
+      - job: Allure
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - download: current
+            patterns: 'allure-results-*/**'
+          - script: |
+              mkdir -p merged-results
+              cp -r $(Pipeline.Workspace)/allure-results-*/* merged-results/ 2>/dev/null || true
+              npx --yes allure-commandline@2.32.0 generate merged-results -o allure-report --clean
+            displayName: Merge and generate Allure report
+          - publish: allure-report
+            artifact: allure-report
+            displayName: Publish Allure HTML report

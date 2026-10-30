@@ -1,0 +1,10 @@
+target/
+.auth/
+*.iml
+.idea/
+.vscode/
+.DS_Store
+allure-report/
+.allure/
+*.log
+.env
